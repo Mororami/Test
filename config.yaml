@@ -1,0 +1,39 @@
+# Bitkub 시세 알람 봇 + 김프 대시보드 설정
+# 비밀값(Telegram 토큰/채팅 ID)은 여기 말고 .env 에 넣습니다.
+
+poll_interval_sec: 30          # 시세 수집 주기(초)
+history_max_age_sec: 3600      # 단기 변동률 계산용 가격 이력 보관 시간(초)
+
+fx:
+  mode: forex                  # forex: 외환 환율 / usdt: 양 거래소 USDT 가격으로 역산한 환율
+  refresh_sec: 3600            # 외환 환율 갱신 주기(초)
+  override_thb_krw: null       # 수동 고정 환율 (예: 41.5). null 이면 자동 조회
+
+alerts:
+  pump:                        # 단기 급등: window_min 분 동안 threshold_pct % 이상 상승
+    enabled: true
+    window_min: 5
+    threshold_pct: 5.0
+    min_quote_volume_thb: 100000   # Bitkub 24h 거래대금이 이 값(THB) 미만이면 무시 (저유동성 제외)
+  change_24h:                  # Bitkub 24h 변동률이 threshold_pct % 이상
+    enabled: false
+    threshold_pct: 20.0
+    min_quote_volume_thb: 100000
+  kimp:                        # |김프| 가 threshold_pct % 이상 (Bithumb 상장 코인만)
+    enabled: true
+    threshold_pct: 5.0
+    min_quote_volume_thb: 100000
+    min_quote_volume_krw: 10000000
+  cooldown_min: 30             # 같은 코인·같은 종류 알림 재발송 최소 간격(분)
+  startup_message: true        # 봇 시작 시 Telegram 으로 시작 알림
+
+symbols:
+  include: []                  # 비어 있으면 Bitkub THB 마켓 전체. 예: [BTC, ETH, XRP]
+  exclude: []                  # 제외할 심볼
+  aliases: {}                  # 두 거래소 심볼이 다를 때 매핑. 예: {BITKUB심볼: BITHUMB심볼}
+  mismatch_kimp_pct: 50        # |김프| 가 이 값 이상이면 '같은 티커, 다른 코인' 으로 보고 알림·통계에서 제외
+
+dashboard:
+  host: 127.0.0.1              # 외부 접속 허용 시 0.0.0.0
+  port: 8080
+  kimp_highlight_pct: 3.0      # |김프| 가 이 값 이상이면 표에서 강조
