@@ -39,6 +39,7 @@ Python 3.11 이상. 거래소·환율 API 는 모두 공개 API 라 거래소 AP
 | `python -m app dashboard` | 시세 수집 + 웹 대시보드 (알람 전송 없음, 감지된 알림은 대시보드에만 표시) |
 | `python -m app all` | 시세 수집 + Telegram 알람 + 웹 대시보드 |
 | `python -m app once [-n 30]` | 한 번 수집해서 김프 상위 N개를 콘솔에 표로 출력 |
+| `python -m app export [-o kimp.html]` | 한 번 수집해서 서버 없이 브라우저로 열 수 있는 단일 HTML 김프 보드 저장 |
 | `python -m app test-telegram` | Telegram 연결 테스트 메시지 전송 |
 | `python -m app chat-id` | 봇이 받은 메시지에서 chat_id 찾기 |
 | 공통 옵션 | `-c 경로` 설정 파일 지정, `-v` 디버그 로그 |
@@ -142,6 +143,8 @@ app/
   dashboard/
     server.py          FastAPI: /, /api/snapshot, /api/alerts, /api/health
     static/index.html  대시보드 화면 (외부 의존성 없음)
+    static/standalone.html  export 용 단일 파일 김프 보드 템플릿
+  export.py            스냅샷을 standalone.html 에 넣어 단일 HTML 생성
 tests/                 pytest (네트워크 없이 실행)
 config.yaml            동작 설정
 .env.example           비밀값 예시

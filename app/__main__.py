@@ -6,6 +6,7 @@ import asyncio
 import logging
 import signal
 import sys
+from pathlib import Path
 
 import httpx
 
@@ -27,6 +28,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("all", help="시세 수집 + Telegram 알람 + 웹 대시보드 (한 프로세스)")
     once = sub.add_parser("once", help="한 번 수집해서 콘솔에 김프 표 출력")
     once.add_argument("-n", "--top", type=int, default=30, help="표시할 코인 수")
+    exp = sub.add_parser("export", help="한 번 수집해서 서버 없이 열 수 있는 HTML 파일로 저장")
+    exp.add_argument("-o", "--output", default="kimp.html", help="저장할 파일 (기본: kimp.html)")
     sub.add_parser("test-telegram", help="Telegram 설정 확인용 메시지 전송")
     sub.add_parser("chat-id", help="봇이 받은 메시지에서 chat_id 찾기")
     return p
@@ -52,6 +55,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_server(cfg, with_alerts=True)
         if args.command == "once":
             return asyncio.run(run_once(cfg, args.top))
+        if args.command == "export":
+            return asyncio.run(run_export(cfg, args.output))
         if args.command == "test-telegram":
             return asyncio.run(test_telegram(cfg))
         if args.command == "chat-id":
@@ -101,6 +106,21 @@ async def run_once(cfg: AppConfig, top: int) -> int:
         print(f"수집 실패: {collector.last_error}", file=sys.stderr)
         return 1
     print(render_table(snapshot, top))
+    return 0
+
+
+async def run_export(cfg: AppConfig, output: str) -> int:
+    from app.collector import Collector
+    from app.export import render_standalone
+
+    async with Collector(cfg) as collector:
+        snapshot = await collector.poll_once()
+    if snapshot is None:
+        print(f"수집 실패: {collector.last_error}", file=sys.stderr)
+        return 1
+    path = Path(output)
+    path.write_text(render_standalone(snapshot, cfg.dashboard.kimp_highlight_pct), encoding="utf-8")
+    print(f"{path} 저장 ({snapshot.stats.matched_count}개 비교, 환율 {snapshot.rate_used.thb_krw:.3f})")
     return 0
 
 

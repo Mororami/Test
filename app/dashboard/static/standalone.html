@@ -1,0 +1,331 @@
+<title>김프 보드</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  color-scheme:light;
+  --ground:#f6f5f1; --surface:#fdfcf9; --surface-2:#f0eee8; --ink:#14161c; --ink-2:#4f5460; --muted:#858a97;
+  --hair:#e4e1d8; --border:rgba(20,22,28,.10); --wash:rgba(20,22,28,.04);
+  --prem:#d13b3b; --disc:#2a6fd0; --prem-soft:rgba(209,59,59,.12); --disc-soft:rgba(42,111,208,.12);
+  --accent:#1f3c88;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --ground:#111216; --surface:#191b21; --surface-2:#22252d; --ink:#f3f2ee; --ink-2:#c2c3c9; --muted:#8a8e9a;
+    --hair:#2a2d36; --border:rgba(255,255,255,.10); --wash:rgba(255,255,255,.05);
+    --prem:#e46464; --disc:#4d8ee6; --prem-soft:rgba(228,100,100,.16); --disc-soft:rgba(77,142,230,.16);
+    --accent:#8fb0ff;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#111216; --surface:#191b21; --surface-2:#22252d; --ink:#f3f2ee; --ink-2:#c2c3c9; --muted:#8a8e9a;
+  --hair:#2a2d36; --border:rgba(255,255,255,.10); --wash:rgba(255,255,255,.05);
+  --prem:#e46464; --disc:#4d8ee6; --prem-soft:rgba(228,100,100,.16); --disc-soft:rgba(77,142,230,.16);
+  --accent:#8fb0ff;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:"IBM Plex Sans KR",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.45}
+.wrap{max-width:1280px;margin:0 auto;padding-block:20px 40px;padding-inline:16px}
+.num{font-family:"IBM Plex Mono","SFMono-Regular",Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8px 24px;margin-bottom:18px}
+h1{font-size:24px;font-weight:700;margin:0;letter-spacing:-.01em}
+.eyebrow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:4px}
+.asof{color:var(--ink-2);font-size:13px}
+.asof b{color:var(--ink);font-weight:600}
+h2{font-size:14px;font-weight:600;margin:0 0 10px;color:var(--ink-2)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;min-width:0}
+.tile .label{font-size:12px;color:var(--ink-2)}
+.tile .value{font-size:28px;font-weight:600;margin-top:4px;letter-spacing:-.01em;line-height:1.1}
+.tile .sub{font-size:12px;color:var(--muted);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.glance{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:22px}
+@media (max-width:760px){.glance{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;min-width:0}
+.panel h2{display:flex;justify-content:space-between;align-items:baseline}
+.panel h2 span{font-weight:400;color:var(--muted);font-size:12px}
+.rank{display:grid;grid-template-columns:auto 1fr auto;gap:4px 12px;align-items:center;font-size:13px}
+.rank .sym{font-weight:600}
+.rank .track{height:8px;background:var(--surface-2);border-radius:4px;overflow:hidden}
+.rank .track i{display:block;height:100%;border-radius:4px}
+.rank.prem .track i{background:var(--prem)}
+.rank.disc .track i{background:var(--disc)}
+.rank .pct{text-align:right;min-width:64px}
+.dist{margin-top:10px}
+.dist svg{width:100%;height:auto;display:block}
+.dist .axis{fill:var(--muted);font-size:10px;font-family:"IBM Plex Mono",monospace}
+.dist .bar-p{fill:var(--prem)} .dist .bar-d{fill:var(--disc)} .dist .bar-z{fill:var(--muted)}
+.dist .mid{stroke:var(--hair);stroke-width:1}
+.legend{display:flex;gap:16px;font-size:12px;color:var(--ink-2);margin-top:6px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:22px 0 10px}
+.filters .spacer{flex:1}
+input,select,button{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px}
+input:focus,select:focus,button:focus{outline:2px solid var(--accent);outline-offset:1px}
+button{cursor:pointer}
+.count{color:var(--muted);font-size:12px}
+.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:auto}
+table{border-collapse:collapse;width:100%;min-width:980px}
+thead th{position:sticky;top:0;z-index:1;background:var(--surface);text-align:right;font-size:12px;font-weight:600;color:var(--ink-2);padding:10px 12px;border-bottom:1px solid var(--hair);cursor:pointer;white-space:nowrap;user-select:none}
+thead th.active{color:var(--ink)}
+thead th .dir{font-size:9px;margin-left:3px;color:var(--muted)}
+th.sym,td.sym{text-align:left}
+td{padding:7px 12px;text-align:right;border-bottom:1px solid var(--hair);white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:var(--wash)}
+td.sym{font-weight:600}
+.na{color:var(--muted)}
+.kimp{display:inline-flex;align-items:center;gap:10px;justify-content:flex-end}
+.kimp .v{min-width:64px;display:inline-block}
+.bar{position:relative;width:96px;height:8px;background:var(--surface-2);border-radius:4px;overflow:hidden;flex:none}
+.bar::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--border)}
+.bar i{position:absolute;top:0;height:100%}
+.bar i.pos{left:50%;background:var(--prem);border-radius:0 4px 4px 0}
+.bar i.neg{right:50%;background:var(--disc);border-radius:4px 0 0 4px}
+tr.hl td.kimp-cell .v{font-weight:600}
+.chip{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;border:1px solid var(--border);color:var(--ink-2)}
+.tri{display:inline-block;width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;margin-right:6px;vertical-align:1px}
+.tri.up{border-bottom:7px solid var(--prem)}
+.tri.down{border-top:7px solid var(--disc)}
+.tri.flat{width:7px;height:2px;background:var(--muted);border:0;vertical-align:3px}
+footer{margin-top:18px;color:var(--muted);font-size:12px;line-height:1.7}
+footer code{font-family:"IBM Plex Mono",monospace;font-size:11px;background:var(--surface-2);padding:1px 5px;border-radius:4px}
+@media (max-width:640px){h1{font-size:20px}.tile .value{font-size:24px}.bar{width:64px}}
+@media (prefers-reduced-motion:no-preference){tbody tr td{transition:background .12s}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Bitkub (THB) × Bithumb (KRW)</div>
+      <h1>김프 보드</h1>
+    </div>
+    <div class="asof" id="asof"></div>
+  </header>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="glance">
+    <div class="panel"><h2>김프 상위 <span>Bithumb 이 더 비쌈</span></h2><div class="rank prem" id="top-prem"></div></div>
+    <div class="panel"><h2>역프 상위 <span>Bitkub 이 더 비쌈</span></h2><div class="rank disc" id="top-disc"></div></div>
+  </div>
+
+  <div class="panel dist" style="margin-top:10px">
+    <h2>김프 분포 <span id="dist-sub"></span></h2>
+    <div id="dist"></div>
+    <div class="legend"><span><i style="background:var(--prem)"></i>김프 (Bithumb 비쌈)</span><span><i style="background:var(--disc)"></i>역프 (Bitkub 비쌈)</span><span><i style="background:var(--muted)"></i>±0.5% 이내</span></div>
+  </div>
+
+  <div class="filters">
+    <input id="q" type="search" placeholder="코인 검색 (예: BTC)" autocomplete="off" aria-label="코인 검색">
+    <select id="listing" aria-label="상장 필터">
+      <option value="both">Bithumb 상장 코인만</option>
+      <option value="all">Bitkub 전체</option>
+      <option value="only">Bithumb 미상장만</option>
+    </select>
+    <select id="minvol" aria-label="거래대금 필터">
+      <option value="0">거래대금 제한 없음</option>
+      <option value="100000" selected>Bitkub 24h ≥ 100K THB</option>
+      <option value="1000000">Bitkub 24h ≥ 1M THB</option>
+      <option value="10000000">Bitkub 24h ≥ 10M THB</option>
+    </select>
+    <span class="spacer"></span>
+    <span class="count" id="count"></span>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr id="thead"></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <footer>
+    김프(%) = (Bithumb KRW ÷ (Bitkub THB × 환율) − 1) × 100. 양수는 Bithumb 이 비싼 것(김프), 음수는 Bitkub 이 비싼 것(역프).<br>
+    이 페이지는 위 시각에 수집한 스냅샷입니다. 실시간 갱신은 <code>python -m app dashboard</code>, 이 페이지 재생성은 <code>python -m app export</code>.
+    "동명이인?" 은 티커만 같은 다른 코인으로 의심되는 행이며 통계에서 제외됩니다.
+  </footer>
+</div>
+
+<script>
+const DATA = __SNAPSHOT__;
+</script>
+<script>
+(function () {
+  'use strict';
+  const $ = (s) => document.querySelector(s);
+  const KIMP_BAR_CAP = 10;
+  const HIGHLIGHT = DATA.highlight_pct || 3;
+  const snap = DATA.snapshot;
+  const state = { sort: { key: 'kimp_pct', dir: 'desc' }, q: '', listing: 'both', minvol: 100000 };
+
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+  function fmtNum(v) {
+    if (!isNum(v)) return '-';
+    const a = Math.abs(v);
+    if (a >= 1000) return v.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    if (a >= 1) return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (a >= 0.01) return v.toFixed(4);
+    const digits = Math.min(12, 3 - Math.floor(Math.log10(a)));
+    return v.toFixed(digits).replace(/0+$/, '').replace(/\.$/, '');
+  }
+  function fmtKrw(v) {
+    if (!isNum(v)) return '-';
+    const a = Math.abs(v);
+    if (a >= 100) return v.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    if (a >= 1) return v.toFixed(2);
+    return v.toFixed(4);
+  }
+  const fmtPct = (v, d = 2) => isNum(v) ? (v > 0 ? '+' : '') + v.toFixed(d) + '%' : '-';
+  function fmtCompact(v) {
+    if (!isNum(v)) return '-';
+    const a = Math.abs(v);
+    if (a >= 1e9) return (v / 1e9).toFixed(1) + 'B';
+    if (a >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+    if (a >= 1e3) return (v / 1e3).toFixed(1) + 'K';
+    return v.toFixed(0);
+  }
+  const n = (s) => `<span class="num">${s}</span>`;
+
+  // ---- 헤더/타일 ----
+  const d = new Date(snap.ts * 1000);
+  $('#asof').innerHTML = `수집 시각 <b class="num">${esc(d.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', hour12: false }))}</b> KST · 환율 1 THB = <b class="num">${snap.rate_used.thb_krw.toFixed(3)}</b>원 (${esc(snap.rate_used.source)})`;
+
+  const st = snap.stats, fx = snap.forex, implied = snap.usdt_implied_thb_krw, used = snap.rate_used;
+  const usedTag = (src) => used.source === src ? ' · 김프 계산에 사용' : '';
+  const tiles = [
+    { label: '외환 환율 (1 THB → KRW)', value: fx ? fx.thb_krw.toFixed(3) : used.thb_krw.toFixed(3),
+      sub: fx ? `${fx.source}${fx.as_of ? ' · ' + fx.as_of : ''}${usedTag(fx.source)}` : '수동 고정값' },
+    { label: 'USDT 내재환율 (KRW/USDT ÷ THB/USDT)', value: isNum(implied) ? implied.toFixed(3) : '-',
+      sub: (isNum(implied) && fx ? `외환 대비 ${fmtPct((implied / fx.thb_krw - 1) * 100)}` : 'USDT 시세 없음') + usedTag('usdt_implied') },
+    { label: '비교 가능 코인', value: String(st.matched_count), sub: `Bitkub ${st.bitkub_count} · Bithumb ${st.bithumb_count}` },
+    { label: '김프 중간값', value: fmtPct(st.median_kimp_pct),
+      sub: isNum(st.max_kimp_pct) ? `최고 ${st.max_kimp_symbol} ${fmtPct(st.max_kimp_pct)} · 최저 ${st.min_kimp_symbol} ${fmtPct(st.min_kimp_pct)}` : '' },
+  ];
+  $('#tiles').innerHTML = tiles.map((t) => `<div class="tile"><div class="label">${esc(t.label)}</div><div class="value num">${esc(t.value)}</div><div class="sub">${esc(t.sub)}</div></div>`).join('');
+
+  // ---- 한눈에: 상위/하위 ----
+  const matched = snap.rows.filter((r) => isNum(r.kimp_pct) && !r.suspect);
+  const liquid = matched.filter((r) => isNum(r.bitkub_volume_thb) && r.bitkub_volume_thb >= 100000 && isNum(r.bithumb_volume_krw) && r.bithumb_volume_krw >= 1e7);
+  const pool = liquid.length >= 8 ? liquid : matched;
+  const prem = pool.filter((r) => r.kimp_pct > 0).sort((a, b) => b.kimp_pct - a.kimp_pct).slice(0, 8);
+  const disc = pool.filter((r) => r.kimp_pct < 0).sort((a, b) => a.kimp_pct - b.kimp_pct).slice(0, 8);
+  function rank(el, rows) {
+    const max = Math.max(...rows.map((r) => Math.abs(r.kimp_pct)), 0.01);
+    el.innerHTML = rows.length ? rows.map((r) =>
+      `<span class="sym">${esc(r.symbol)}</span><span class="track"><i style="width:${(Math.abs(r.kimp_pct) / max * 100).toFixed(1)}%"></i></span><span class="pct num">${fmtPct(r.kimp_pct)}</span>`).join('')
+      : '<span class="na">해당 없음</span>';
+  }
+  rank($('#top-prem'), prem); rank($('#top-disc'), disc);
+  $('#dist-sub').textContent = pool === liquid ? `거래대금 기준 충족 ${pool.length}개 (Bitkub ≥ 100K THB, Bithumb ≥ 1천만원)` : `${pool.length}개`;
+
+  // ---- 분포 히스토그램 (SVG) ----
+  (function hist() {
+    const W = 900, H = 170, padL = 8, padR = 8, padT = 12, padB = 26;
+    const step = 1, lo = -10.5, hi = 10.5;          // 0 을 중심으로 한 1% 구간, 가운데 구간이 ±0.5%
+    const bins = [];
+    for (let x = lo; x < hi - 1e-9; x += step) bins.push({ x0: x, x1: x + step, n: 0 });
+    let below = 0, above = 0;
+    pool.forEach((r) => {
+      const v = r.kimp_pct;
+      if (v < lo) { below++; return; } if (v >= hi) { above++; return; }
+      bins[Math.floor((v - lo) / step)].n++;
+    });
+    const all = [{ n: below, edge: `<${lo}%` }, ...bins, { n: above, edge: `≥${hi}%` }];
+    const max = Math.max(...all.map((b) => b.n), 1);
+    const bw = (W - padL - padR) / all.length;
+    const plotH = H - padT - padB;
+    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="김프 분포 히스토그램">`;
+    const zeroIdx = all.findIndex((b) => !b.edge && b.x0 < 0 && b.x1 > 0);
+    const midX = padL + bw * zeroIdx + bw / 2;
+    svg += `<line class="mid" x1="${midX.toFixed(1)}" y1="${padT}" x2="${midX.toFixed(1)}" y2="${H - padB}"/>`;
+    all.forEach((b, i) => {
+      const h = b.n / max * plotH, x = padL + i * bw + 1, y = padT + plotH - h, cx = x + (bw - 2) / 2;
+      const cls = b.edge ? (i === 0 ? 'bar-d' : 'bar-p') : b.x1 <= 0 ? 'bar-d' : b.x0 >= 0 ? 'bar-p' : 'bar-z';
+      const title = b.edge ? b.edge : `${b.x0}% ~ ${b.x1}%`;
+      svg += `<rect class="${cls}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(bw - 2).toFixed(1)}" height="${h.toFixed(1)}" rx="2"><title>${title}: ${b.n}개</title></rect>`;
+      if (b.n > 0) svg += `<text class="axis" x="${cx.toFixed(1)}" y="${(y - 3).toFixed(1)}" text-anchor="middle">${b.n}</text>`;
+      const center = b.edge ? null : b.x0 + 0.5;
+      const label = b.edge ? b.edge : (center % 5 === 0 ? (center > 0 ? '+' : '') + center + '%' : '');
+      if (label) svg += `<text class="axis" x="${cx.toFixed(1)}" y="${H - 8}" text-anchor="middle">${label}</text>`;
+    });
+    svg += '</svg>';
+    $('#dist').innerHTML = svg;
+  })();
+
+  // ---- 표 ----
+  function kimpCell(r) {
+    const v = r.kimp_pct;
+    if (!isNum(v)) return '<span class="na">-</span>';
+    if (r.suspect) return `<span class="kimp"><span class="chip" title="티커는 같지만 다른 코인일 가능성이 큽니다">동명이인?</span><span class="v na num">${fmtPct(v)}</span></span>`;
+    const w = Math.min(Math.abs(v) / KIMP_BAR_CAP, 1) * 50;
+    return `<span class="kimp"><span class="bar"><i class="${v >= 0 ? 'pos' : 'neg'}" style="width:${w.toFixed(1)}%"></i></span><span class="v num">${fmtPct(v)}</span></span>`;
+  }
+  function deltaCell(v) {
+    if (!isNum(v)) return '<span class="na">-</span>';
+    const cls = v > 0.005 ? 'up' : v < -0.005 ? 'down' : 'flat';
+    return `<span class="tri ${cls}"></span>${n(fmtPct(v))}`;
+  }
+  const COLS = [
+    { key: 'symbol', label: '코인', cls: 'sym', text: (r) => r.symbol, asc: true, plain: true },
+    { key: 'bitkub_thb', label: 'Bitkub (THB)', text: (r) => fmtNum(r.bitkub_thb) },
+    { key: 'bitkub_krw', label: 'Bitkub 환산 (KRW)', text: (r) => fmtKrw(r.bitkub_krw) },
+    { key: 'bithumb_krw', label: 'Bithumb (KRW)', text: (r) => fmtKrw(r.bithumb_krw) },
+    { key: 'kimp_pct', label: '김프', cls: 'kimp-cell', html: (r) => kimpCell(r) },
+    { key: 'bitkub_change_24h_pct', label: '24h Bitkub', html: (r) => deltaCell(r.bitkub_change_24h_pct) },
+    { key: 'bithumb_change_24h_pct', label: '24h Bithumb', html: (r) => deltaCell(r.bithumb_change_24h_pct) },
+    { key: 'bitkub_volume_thb', label: '거래대금 Bitkub (THB)', text: (r) => fmtCompact(r.bitkub_volume_thb) },
+    { key: 'bithumb_volume_krw', label: '거래대금 Bithumb (KRW)', text: (r) => fmtCompact(r.bithumb_volume_krw) },
+  ];
+  function visibleRows() {
+    const q = state.q.trim().toUpperCase();
+    const rows = snap.rows.filter((r) => {
+      if (q && !r.symbol.includes(q)) return false;
+      if (state.listing === 'both' && !isNum(r.kimp_pct)) return false;
+      if (state.listing === 'only' && isNum(r.bithumb_krw)) return false;
+      if (state.minvol > 0 && !(isNum(r.bitkub_volume_thb) && r.bitkub_volume_thb >= state.minvol)) return false;
+      return true;
+    });
+    const { key, dir } = state.sort, sign = dir === 'asc' ? 1 : -1;
+    rows.sort((a, b) => {
+      const x = a[key], y = b[key];
+      if (key === 'symbol') return sign * x.localeCompare(y);
+      const xn = isNum(x), yn = isNum(y);
+      if (!xn && !yn) return a.symbol.localeCompare(b.symbol);
+      if (!xn) return 1; if (!yn) return -1;
+      return sign * (x - y) || a.symbol.localeCompare(b.symbol);
+    });
+    return rows;
+  }
+  function renderHead() {
+    $('#thead').innerHTML = COLS.map((c) => {
+      const active = state.sort.key === c.key;
+      return `<th class="${c.cls || ''} ${active ? 'active' : ''}" data-key="${c.key}">${esc(c.label)}${active ? `<span class="dir">${state.sort.dir === 'asc' ? '▲' : '▼'}</span>` : ''}</th>`;
+    }).join('');
+  }
+  function renderBody() {
+    const rows = visibleRows();
+    $('#tbody').innerHTML = rows.map((r) => {
+      const cls = isNum(r.kimp_pct) && !r.suspect && Math.abs(r.kimp_pct) >= HIGHLIGHT ? 'hl' : '';
+      return `<tr class="${cls}">${COLS.map((c) => {
+        const raw = c.html ? c.html(r) : esc(c.text(r));
+        const inner = c.html || c.plain ? raw : (raw === '-' ? raw : n(raw));
+        return `<td class="${c.cls || ''} ${!c.html && raw === '-' ? 'na' : ''}">${inner}</td>`;
+      }).join('')}</tr>`;
+    }).join('');
+    $('#count').textContent = `${rows.length} / ${snap.rows.length} 코인`;
+  }
+  $('#thead').addEventListener('click', (ev) => {
+    const th = ev.target.closest('th'); if (!th) return;
+    const key = th.dataset.key, col = COLS.find((c) => c.key === key);
+    if (state.sort.key === key) state.sort.dir = state.sort.dir === 'asc' ? 'desc' : 'asc';
+    else state.sort = { key, dir: col && col.asc ? 'asc' : 'desc' };
+    renderHead(); renderBody();
+  });
+  $('#q').addEventListener('input', (ev) => { state.q = ev.target.value; renderBody(); });
+  $('#listing').addEventListener('change', (ev) => { state.listing = ev.target.value; renderBody(); });
+  $('#minvol').addEventListener('change', (ev) => { state.minvol = Number(ev.target.value); renderBody(); });
+  renderHead(); renderBody();
+})();
+</script>
