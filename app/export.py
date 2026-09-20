@@ -1,4 +1,7 @@
-"""스냅샷을 담은 단일 HTML 파일 생성 (서버 없이 브라우저로 열 수 있는 김프 보드)."""
+"""live.html 에 현재 스냅샷을 심어 단일 HTML 파일로 저장한다.
+
+결과 파일은 열자마자 스냅샷을 보여주고, 브라우저에서 거래소 API 를 직접 호출해 계속 갱신한다.
+"""
 from __future__ import annotations
 
 import json
@@ -6,8 +9,8 @@ from pathlib import Path
 
 from app.models import Snapshot
 
-TEMPLATE = Path(__file__).parent / "dashboard" / "static" / "standalone.html"
-PLACEHOLDER = "__SNAPSHOT__"
+TEMPLATE = Path(__file__).parent / "dashboard" / "static" / "live.html"
+PLACEHOLDER = "/*SNAPSHOT*/null/*END*/"
 
 
 def render_standalone(snapshot: Snapshot, highlight_pct: float, full_document: bool = True) -> str:

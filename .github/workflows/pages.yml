@@ -1,0 +1,41 @@
+# GitHub Pages 에 실시간 김프 보드(app/dashboard/static/live.html)를 배포한다.
+# 저장소 Settings → Pages → Source 를 "GitHub Actions" 로 두면 main 에 푸시할 때마다 갱신된다.
+name: Deploy kimp board to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths: [app/dashboard/static/live.html, .github/workflows/pages.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble site
+        run: |
+          mkdir -p site
+          {
+            echo '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body>'
+            cat app/dashboard/static/live.html
+            echo '</body></html>'
+          } > site/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

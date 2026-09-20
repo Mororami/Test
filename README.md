@@ -8,6 +8,7 @@ Telegram 으로 알려주는 봇과, Bitkub·Bithumb 가격을 나란히 비교�
 |---|---|---|
 | **1. 시세 알람 봇** | `python -m app bot` | 30초마다 Bitkub 전 종목 수집 → THB→KRW 환산 → 급등/김프 조건 판정 → Telegram 전송 |
 | **2. 김프 대시보드** | `python -m app dashboard` | `http://127.0.0.1:8080` 에서 Bitkub vs Bithumb 가격·김프·거래대금 표 (정렬·검색·자동 갱신·다크모드) |
+| 2-b. 서버 없는 김프 보드 | `app/dashboard/static/live.html` | 브라우저가 거래소 API 를 직접 호출해 15초마다 갱신. 파일을 열거나 GitHub Pages 로 배포 |
 | 둘 다 | `python -m app all` | 한 프로세스에서 봇 + 대시보드 |
 
 ## 빠른 시작
@@ -39,12 +40,22 @@ Python 3.11 이상. 거래소·환율 API 는 모두 공개 API 라 거래소 AP
 | `python -m app dashboard` | 시세 수집 + 웹 대시보드 (알람 전송 없음, 감지된 알림은 대시보드에만 표시) |
 | `python -m app all` | 시세 수집 + Telegram 알람 + 웹 대시보드 |
 | `python -m app once [-n 30]` | 한 번 수집해서 김프 상위 N개를 콘솔에 표로 출력 |
-| `python -m app export [-o kimp.html]` | 한 번 수집해서 서버 없이 브라우저로 열 수 있는 단일 HTML 김프 보드 저장 |
+| `python -m app export [-o kimp.html]` | 김프 보드(`live.html`)에 현재 스냅샷을 심어 단일 HTML 로 저장. 열면 스냅샷을 먼저 보여주고 이어서 실시간 갱신 |
 | `python -m app test-telegram` | Telegram 연결 테스트 메시지 전송 |
 | `python -m app chat-id` | 봇이 받은 메시지에서 chat_id 찾기 |
 | 공통 옵션 | `-c 경로` 설정 파일 지정, `-v` 디버그 로그 |
 
 대시보드 API: `GET /api/snapshot` (전체 표 데이터), `GET /api/alerts?limit=50` (최근 알림), `GET /api/health`.
+
+## 서버 없는 실시간 김프 보드 (GitHub Pages)
+
+`app/dashboard/static/live.html` 은 서버 없이 동작하는 김프 보드입니다. Bitkub · Bithumb · 환율 API 가 모두 브라우저의 직접 호출을 허용(CORS)하므로,
+페이지 자체가 15초마다 시세를 가져와 김프를 계산합니다. 환율 타일, 김프/역프 상위 8, 김프 분포 히스토그램, 정렬·검색 가능한 전체 표가 있습니다.
+
+- **바로 열기**: `python -m app export -o kimp.html` 로 만든 파일을 더블클릭. (템플릿 `live.html` 을 직접 열어도 됩니다.)
+- **URL 로 접속**: `.github/workflows/pages.yml` 이 `main` 에 푸시될 때마다 이 파일을 GitHub Pages 에 배포합니다.
+  저장소 **Settings → Pages → Source** 를 **GitHub Actions** 로 한 번만 설정하면 `https://<계정>.github.io/<저장소>/` 에서 볼 수 있습니다.
+- 5분 변동률은 페이지를 열어 둔 동안 쌓인 가격으로 계산하므로 연 직후 5분간은 비어 있습니다. 알림(Telegram)은 이 페이지가 아니라 `python -m app bot` 이 담당합니다.
 
 ## 설정 (`config.yaml`)
 
@@ -143,8 +154,9 @@ app/
   dashboard/
     server.py          FastAPI: /, /api/snapshot, /api/alerts, /api/health
     static/index.html  대시보드 화면 (외부 의존성 없음)
-    static/standalone.html  export 용 단일 파일 김프 보드 템플릿
-  export.py            스냅샷을 standalone.html 에 넣어 단일 HTML 생성
+    static/live.html   서버 없는 실시간 김프 보드 (GitHub Pages 배포 대상, export 템플릿)
+  export.py            live.html 에 스냅샷을 심어 단일 HTML 생성
+.github/workflows/pages.yml  live.html 을 GitHub Pages 로 배포
 tests/                 pytest (네트워크 없이 실행)
 config.yaml            동작 설정
 .env.example           비밀값 예시

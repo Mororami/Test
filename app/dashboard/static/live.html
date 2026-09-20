@@ -33,6 +33,13 @@ h1{font-size:24px;font-weight:700;margin:0;letter-spacing:-.01em}
 .eyebrow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:4px}
 .asof{color:var(--ink-2);font-size:13px}
 .asof b{color:var(--ink);font-weight:600}
+.asof{text-align:right}
+.live{margin-top:4px;font-size:12px;color:var(--muted);display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.dot.ok{background:#1f9d55}.dot.err{background:var(--prem)}
+@media (prefers-reduced-motion:no-preference){.dot.busy{animation:pulse 1s infinite}}
+@keyframes pulse{50%{opacity:.3}}
+@media (max-width:640px){.asof,.live{text-align:left;justify-content:flex-start}}
 h2{font-size:14px;font-weight:600;margin:0 0 10px;color:var(--ink-2)}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
 .tile{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;min-width:0}
@@ -65,7 +72,7 @@ input:focus,select:focus,button:focus{outline:2px solid var(--accent);outline-of
 button{cursor:pointer}
 .count{color:var(--muted);font-size:12px}
 .table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:auto}
-table{border-collapse:collapse;width:100%;min-width:980px}
+table{border-collapse:collapse;width:100%;min-width:1080px}
 thead th{position:sticky;top:0;z-index:1;background:var(--surface);text-align:right;font-size:12px;font-weight:600;color:var(--ink-2);padding:10px 12px;border-bottom:1px solid var(--hair);cursor:pointer;white-space:nowrap;user-select:none}
 thead th.active{color:var(--ink)}
 thead th .dir{font-size:9px;margin-left:3px;color:var(--muted)}
@@ -100,7 +107,7 @@ footer code{font-family:"IBM Plex Mono",monospace;font-size:11px;background:var(
       <div class="eyebrow">Bitkub (THB) × Bithumb (KRW)</div>
       <h1>김프 보드</h1>
     </div>
-    <div class="asof" id="asof"></div>
+    <div class="asof"><div id="asof"></div><div id="live" class="live"></div></div>
   </header>
 
   <div class="tiles" id="tiles"></div>
@@ -142,23 +149,29 @@ footer code{font-family:"IBM Plex Mono",monospace;font-size:11px;background:var(
 
   <footer>
     김프(%) = (Bithumb KRW ÷ (Bitkub THB × 환율) − 1) × 100. 양수는 Bithumb 이 비싼 것(김프), 음수는 Bitkub 이 비싼 것(역프).<br>
-    이 페이지는 위 시각에 수집한 스냅샷입니다. 실시간 갱신은 <code>python -m app dashboard</code>, 이 페이지 재생성은 <code>python -m app export</code>.
+    이 페이지는 브라우저에서 Bitkub · Bithumb · 환율 API 를 직접 호출해 15초마다 갱신합니다 (서버 불필요). 5분 변동률은 페이지를 열어 둔 동안 쌓인 가격으로 계산합니다.
+    알림 봇은 별도로 <code>python -m app bot</code>, 스냅샷 파일 생성은 <code>python -m app export</code>.
     "동명이인?" 은 티커만 같은 다른 코인으로 의심되는 행이며 통계에서 제외됩니다.
   </footer>
 </div>
 
 <script>
-const DATA = __SNAPSHOT__;
+const DATA = /*SNAPSHOT*/null/*END*/;
 </script>
 <script>
 (function () {
   'use strict';
   const $ = (s) => document.querySelector(s);
   const KIMP_BAR_CAP = 10;
-  const HIGHLIGHT = DATA.highlight_pct || 3;
-  const snap = DATA.snapshot;
-  const state = { sort: { key: 'kimp_pct', dir: 'desc' }, q: '', listing: 'both', minvol: 100000 };
+  const HIGHLIGHT = (DATA && DATA.highlight_pct) || 3;
+  const MISMATCH_PCT = 50;            // |김프| 이 값 이상이면 '동명이인' 의심
+  const REFRESH_MS = 15000;
+  const SHORT_WINDOW_MIN = 5;
+  const HISTORY_MAX_SEC = 3600;
+  const LIQ_THB = 100000, LIQ_KRW = 1e7;
+  const state = { sort: { key: 'kimp_pct', dir: 'desc' }, q: '', listing: 'both', minvol: 100000, snap: null };
 
+  // ---- 포맷 ----
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
   function fmtNum(v) {
@@ -186,42 +199,173 @@ const DATA = __SNAPSHOT__;
     if (a >= 1e3) return (v / 1e3).toFixed(1) + 'K';
     return v.toFixed(0);
   }
+  const fmtTime = (ts) => new Date(ts * 1000).toLocaleTimeString('ko-KR', { hour12: false });
   const n = (s) => `<span class="num">${s}</span>`;
+  const num = (v) => { const f = parseFloat(v); return Number.isFinite(f) ? f : null; };
 
-  // ---- 헤더/타일 ----
-  const d = new Date(snap.ts * 1000);
-  $('#asof').innerHTML = `수집 시각 <b class="num">${esc(d.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', hour12: false }))}</b> KST · 환율 1 THB = <b class="num">${snap.rate_used.thb_krw.toFixed(3)}</b>원 (${esc(snap.rate_used.source)})`;
+  // ---- 실시간 수집 (브라우저에서 거래소 API 직접 호출) ----
+  const history = new Map();          // symbol -> [[ts, price], ...]
+  let bithumbMarkets = null, bithumbMarketsTs = 0;
+  let fxCache = null;                 // {thb_krw, source, fetched_at, as_of}
+  let liveOk = false, lastLiveTs = null, lastLiveError = null, consecutiveFails = 0;
 
-  const st = snap.stats, fx = snap.forex, implied = snap.usdt_implied_thb_krw, used = snap.rate_used;
-  const usedTag = (src) => used.source === src ? ' · 김프 계산에 사용' : '';
-  const tiles = [
-    { label: '외환 환율 (1 THB → KRW)', value: fx ? fx.thb_krw.toFixed(3) : used.thb_krw.toFixed(3),
-      sub: fx ? `${fx.source}${fx.as_of ? ' · ' + fx.as_of : ''}${usedTag(fx.source)}` : '수동 고정값' },
-    { label: 'USDT 내재환율 (KRW/USDT ÷ THB/USDT)', value: isNum(implied) ? implied.toFixed(3) : '-',
-      sub: (isNum(implied) && fx ? `외환 대비 ${fmtPct((implied / fx.thb_krw - 1) * 100)}` : 'USDT 시세 없음') + usedTag('usdt_implied') },
-    { label: '비교 가능 코인', value: String(st.matched_count), sub: `Bitkub ${st.bitkub_count} · Bithumb ${st.bithumb_count}` },
-    { label: '김프 중간값', value: fmtPct(st.median_kimp_pct),
-      sub: isNum(st.max_kimp_pct) ? `최고 ${st.max_kimp_symbol} ${fmtPct(st.max_kimp_pct)} · 최저 ${st.min_kimp_symbol} ${fmtPct(st.min_kimp_pct)}` : '' },
-  ];
-  $('#tiles').innerHTML = tiles.map((t) => `<div class="tile"><div class="label">${esc(t.label)}</div><div class="value num">${esc(t.value)}</div><div class="sub">${esc(t.sub)}</div></div>`).join('');
-
-  // ---- 한눈에: 상위/하위 ----
-  const matched = snap.rows.filter((r) => isNum(r.kimp_pct) && !r.suspect);
-  const liquid = matched.filter((r) => isNum(r.bitkub_volume_thb) && r.bitkub_volume_thb >= 100000 && isNum(r.bithumb_volume_krw) && r.bithumb_volume_krw >= 1e7);
-  const pool = liquid.length >= 8 ? liquid : matched;
-  const prem = pool.filter((r) => r.kimp_pct > 0).sort((a, b) => b.kimp_pct - a.kimp_pct).slice(0, 8);
-  const disc = pool.filter((r) => r.kimp_pct < 0).sort((a, b) => a.kimp_pct - b.kimp_pct).slice(0, 8);
-  function rank(el, rows) {
-    const max = Math.max(...rows.map((r) => Math.abs(r.kimp_pct)), 0.01);
-    el.innerHTML = rows.length ? rows.map((r) =>
-      `<span class="sym">${esc(r.symbol)}</span><span class="track"><i style="width:${(Math.abs(r.kimp_pct) / max * 100).toFixed(1)}%"></i></span><span class="pct num">${fmtPct(r.kimp_pct)}</span>`).join('')
-      : '<span class="na">해당 없음</span>';
+  async function getJson(url) {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`${res.status} ${url}`);
+    return res.json();
   }
-  rank($('#top-prem'), prem); rank($('#top-disc'), disc);
-  $('#dist-sub').textContent = pool === liquid ? `거래대금 기준 충족 ${pool.length}개 (Bitkub ≥ 100K THB, Bithumb ≥ 1천만원)` : `${pool.length}개`;
+  async function fetchBitkub() {
+    const list = await getJson('https://api.bitkub.com/api/v3/market/ticker');
+    const out = new Map();
+    for (const it of list) {
+      const [base, quote] = String(it.symbol || '').toUpperCase().split('_');
+      const last = num(it.last);
+      if (quote !== 'THB' || !base || !(last > 0)) continue;
+      out.set(base, { last, change: num(it.percent_change), volume: num(it.quote_volume) });
+    }
+    if (!out.size) throw new Error('Bitkub 응답이 비어 있음');
+    return out;
+  }
+  async function fetchBithumb(nowSec) {
+    if (!bithumbMarkets || nowSec - bithumbMarketsTs > 3600) {
+      const all = await getJson('https://api.bithumb.com/v1/market/all?isDetails=false');
+      bithumbMarkets = all.map((m) => m.market).filter((m) => typeof m === 'string' && m.startsWith('KRW-'));
+      bithumbMarketsTs = nowSec;
+    }
+    const out = new Map();
+    for (let i = 0; i < bithumbMarkets.length; i += 100) {
+      const chunk = bithumbMarkets.slice(i, i + 100);
+      const list = await getJson('https://api.bithumb.com/v1/ticker?markets=' + chunk.join(','));
+      for (const it of list) {
+        const base = String(it.market || '').split('-')[1];
+        const last = num(it.trade_price);
+        if (!base || !(last > 0)) continue;
+        const rate = num(it.signed_change_rate);
+        out.set(base, { last, change: rate === null ? null : rate * 100, volume: num(it.acc_trade_price_24h) });
+      }
+    }
+    return out;
+  }
+  async function fetchFx(nowSec) {
+    if (fxCache && nowSec - fxCache.fetched_at < 3600) return fxCache;
+    try {
+      const d = await getJson('https://api.frankfurter.dev/v1/latest?base=THB&symbols=KRW');
+      const r = num(d.rates && d.rates.KRW); if (!(r > 0)) throw new Error('frankfurter rate');
+      return (fxCache = { thb_krw: r, source: 'frankfurter', fetched_at: nowSec, as_of: d.date || null });
+    } catch (e) {
+      const d = await getJson('https://open.er-api.com/v6/latest/THB');
+      const r = num(d.rates && d.rates.KRW); if (d.result !== 'success' || !(r > 0)) throw new Error('exchangerate-api');
+      return (fxCache = { thb_krw: r, source: 'exchangerate-api', fetched_at: nowSec, as_of: d.time_last_update_utc || null });
+    }
+  }
+  function recordHistory(bitkub, nowSec) {
+    const cutoff = nowSec - HISTORY_MAX_SEC;
+    for (const [sym, t] of bitkub) {
+      let arr = history.get(sym); if (!arr) history.set(sym, (arr = []));
+      arr.push([nowSec, t.last]);
+      while (arr.length && arr[0][0] < cutoff) arr.shift();
+    }
+  }
+  function shortChange(sym, nowSec) {
+    const arr = history.get(sym); if (!arr || !arr.length) return null;
+    const limit = nowSec - SHORT_WINDOW_MIN * 60 + REFRESH_MS / 2000;
+    let past = null;
+    for (const [ts, price] of arr) { if (ts > limit) break; past = price; }
+    return past > 0 ? (arr[arr.length - 1][1] / past - 1) * 100 : null;
+  }
+  function buildSnapshot(bitkub, bithumb, forex, nowSec) {
+    const bkUsdt = bitkub.get('USDT'), bhUsdt = bithumb.get('USDT');
+    const implied = bkUsdt && bhUsdt ? bhUsdt.last / bkUsdt.last : null;
+    const rate = forex ? forex : (implied ? { thb_krw: implied, source: 'usdt_implied', fetched_at: nowSec, as_of: null } : null);
+    if (!rate) throw new Error('사용할 환율이 없음');
+    const rows = [];
+    for (const sym of [...bitkub.keys()].sort()) {
+      const bt = bitkub.get(sym), bh = bithumb.get(sym);
+      const krw = bt.last * rate.thb_krw;
+      const row = { symbol: sym, bitkub_thb: bt.last, bitkub_krw: krw, bithumb_krw: null, kimp_pct: null,
+        change_short_pct: shortChange(sym, nowSec), bitkub_change_24h_pct: bt.change, bithumb_change_24h_pct: null,
+        bitkub_volume_thb: bt.volume, bithumb_volume_krw: null, suspect: false };
+      if (bh) {
+        row.bithumb_krw = bh.last; row.kimp_pct = (bh.last / krw - 1) * 100;
+        row.bithumb_change_24h_pct = bh.change; row.bithumb_volume_krw = bh.volume;
+        row.suspect = Math.abs(row.kimp_pct) >= MISMATCH_PCT;
+      }
+      rows.push(row);
+    }
+    const matched = rows.filter((r) => isNum(r.kimp_pct) && !r.suspect).sort((a, b) => a.kimp_pct - b.kimp_pct);
+    const stats = { bitkub_count: bitkub.size, bithumb_count: bithumb.size, matched_count: matched.length,
+      median_kimp_pct: null, max_kimp_symbol: null, max_kimp_pct: null, min_kimp_symbol: null, min_kimp_pct: null };
+    if (matched.length) {
+      const m = matched.length, mid = Math.floor(m / 2);
+      stats.median_kimp_pct = m % 2 ? matched[mid].kimp_pct : (matched[mid - 1].kimp_pct + matched[mid].kimp_pct) / 2;
+      stats.max_kimp_symbol = matched[m - 1].symbol; stats.max_kimp_pct = matched[m - 1].kimp_pct;
+      stats.min_kimp_symbol = matched[0].symbol; stats.min_kimp_pct = matched[0].kimp_pct;
+    }
+    return { ts: nowSec, rate_used: rate, forex, usdt_implied_thb_krw: implied, rows, stats, short_window_min: SHORT_WINDOW_MIN };
+  }
+  async function refresh() {
+    if (document.visibilityState === 'hidden') return;
+    const nowSec = Date.now() / 1000;
+    setLive('busy');
+    try {
+      const [bitkub, bithumb, fxRes] = await Promise.all([fetchBitkub(), fetchBithumb(nowSec), fetchFx(nowSec).catch((e) => { console.warn('환율 조회 실패', e); return null; })]);
+      recordHistory(bitkub, nowSec);
+      state.snap = buildSnapshot(bitkub, bithumb, fxRes, nowSec);
+      liveOk = true; lastLiveTs = nowSec; lastLiveError = null; consecutiveFails = 0;
+      render();
+    } catch (e) {
+      consecutiveFails++; lastLiveError = String(e && e.message || e);
+      console.warn('실시간 갱신 실패', e);
+    }
+    setLive();
+  }
+  function setLive(mode) {
+    const el = $('#live');
+    if (mode === 'busy') { el.innerHTML = `<span class="dot busy"></span>갱신 중…`; return; }
+    if (liveOk && !consecutiveFails) el.innerHTML = `<span class="dot ok"></span>실시간 · ${REFRESH_MS / 1000}초마다 갱신 · 마지막 ${fmtTime(lastLiveTs)}`;
+    else if (liveOk) el.innerHTML = `<span class="dot err"></span>갱신 실패 (${consecutiveFails}회) · 마지막 성공 ${fmtTime(lastLiveTs)}`;
+    else if (state.snap) el.innerHTML = `<span class="dot err"></span>스냅샷 표시 중 · 이 위치에서는 거래소 API 를 직접 호출할 수 없습니다 (파일로 열거나 GitHub Pages 에서 실시간)`;
+    else el.innerHTML = `<span class="dot err"></span>데이터를 가져오지 못했습니다: ${esc(lastLiveError || '')}`;
+  }
 
-  // ---- 분포 히스토그램 (SVG) ----
-  (function hist() {
+  // ---- 렌더 ----
+  function render() {
+    const snap = state.snap; if (!snap) return;
+    const d = new Date(snap.ts * 1000);
+    $('#asof').innerHTML = `수집 시각 <b class="num">${esc(d.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', hour12: false }))}</b> KST · 환율 1 THB = <b class="num">${snap.rate_used.thb_krw.toFixed(3)}</b>원 (${esc(snap.rate_used.source)})`;
+    renderTiles(snap); renderGlance(snap); renderHead(); renderBody();
+  }
+  function renderTiles(snap) {
+    const st = snap.stats, fx = snap.forex, implied = snap.usdt_implied_thb_krw, used = snap.rate_used;
+    const usedTag = (src) => used.source === src ? ' · 김프 계산에 사용' : '';
+    const tiles = [
+      { label: '외환 환율 (1 THB → KRW)', value: fx ? fx.thb_krw.toFixed(3) : used.thb_krw.toFixed(3),
+        sub: fx ? `${fx.source}${fx.as_of ? ' · ' + fx.as_of : ''}${usedTag(fx.source)}` : '외환 환율 조회 실패' },
+      { label: 'USDT 내재환율 (KRW/USDT ÷ THB/USDT)', value: isNum(implied) ? implied.toFixed(3) : '-',
+        sub: (isNum(implied) && fx ? `외환 대비 ${fmtPct((implied / fx.thb_krw - 1) * 100)}` : 'USDT 시세 없음') + usedTag('usdt_implied') },
+      { label: '비교 가능 코인', value: String(st.matched_count), sub: `Bitkub ${st.bitkub_count} · Bithumb ${st.bithumb_count}` },
+      { label: '김프 중간값', value: fmtPct(st.median_kimp_pct),
+        sub: isNum(st.max_kimp_pct) ? `최고 ${st.max_kimp_symbol} ${fmtPct(st.max_kimp_pct)} · 최저 ${st.min_kimp_symbol} ${fmtPct(st.min_kimp_pct)}` : '' },
+    ];
+    $('#tiles').innerHTML = tiles.map((t) => `<div class="tile"><div class="label">${esc(t.label)}</div><div class="value num">${esc(t.value)}</div><div class="sub">${esc(t.sub)}</div></div>`).join('');
+  }
+  function renderGlance(snap) {
+    const matched = snap.rows.filter((r) => isNum(r.kimp_pct) && !r.suspect);
+    const liquid = matched.filter((r) => isNum(r.bitkub_volume_thb) && r.bitkub_volume_thb >= LIQ_THB && isNum(r.bithumb_volume_krw) && r.bithumb_volume_krw >= LIQ_KRW);
+    const pool = liquid.length >= 8 ? liquid : matched;
+    const prem = pool.filter((r) => r.kimp_pct > 0).sort((a, b) => b.kimp_pct - a.kimp_pct).slice(0, 8);
+    const disc = pool.filter((r) => r.kimp_pct < 0).sort((a, b) => a.kimp_pct - b.kimp_pct).slice(0, 8);
+    const rank = (el, rows) => {
+      const max = Math.max(...rows.map((r) => Math.abs(r.kimp_pct)), 0.01);
+      el.innerHTML = rows.length ? rows.map((r) =>
+        `<span class="sym">${esc(r.symbol)}</span><span class="track"><i style="width:${(Math.abs(r.kimp_pct) / max * 100).toFixed(1)}%"></i></span><span class="pct num">${fmtPct(r.kimp_pct)}</span>`).join('')
+        : '<span class="na">해당 없음</span>';
+    };
+    rank($('#top-prem'), prem); rank($('#top-disc'), disc);
+    $('#dist-sub').textContent = pool === liquid ? `거래대금 기준 충족 ${pool.length}개 (Bitkub ≥ 100K THB, Bithumb ≥ 1천만원)` : `${pool.length}개`;
+    renderHist(pool);
+  }
+  function renderHist(pool) {
     const W = 900, H = 170, padL = 8, padR = 8, padT = 12, padB = 26;
     const step = 1, lo = -10.5, hi = 10.5;          // 0 을 중심으로 한 1% 구간, 가운데 구간이 ±0.5%
     const bins = [];
@@ -234,8 +378,7 @@ const DATA = __SNAPSHOT__;
     });
     const all = [{ n: below, edge: `<${lo}%` }, ...bins, { n: above, edge: `≥${hi}%` }];
     const max = Math.max(...all.map((b) => b.n), 1);
-    const bw = (W - padL - padR) / all.length;
-    const plotH = H - padT - padB;
+    const bw = (W - padL - padR) / all.length, plotH = H - padT - padB;
     let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="김프 분포 히스토그램">`;
     const zeroIdx = all.findIndex((b) => !b.edge && b.x0 < 0 && b.x1 > 0);
     const midX = padL + bw * zeroIdx + bw / 2;
@@ -250,9 +393,8 @@ const DATA = __SNAPSHOT__;
       const label = b.edge ? b.edge : (center % 5 === 0 ? (center > 0 ? '+' : '') + center + '%' : '');
       if (label) svg += `<text class="axis" x="${cx.toFixed(1)}" y="${H - 8}" text-anchor="middle">${label}</text>`;
     });
-    svg += '</svg>';
-    $('#dist').innerHTML = svg;
-  })();
+    $('#dist').innerHTML = svg + '</svg>';
+  }
 
   // ---- 표 ----
   function kimpCell(r) {
@@ -273,12 +415,14 @@ const DATA = __SNAPSHOT__;
     { key: 'bitkub_krw', label: 'Bitkub 환산 (KRW)', text: (r) => fmtKrw(r.bitkub_krw) },
     { key: 'bithumb_krw', label: 'Bithumb (KRW)', text: (r) => fmtKrw(r.bithumb_krw) },
     { key: 'kimp_pct', label: '김프', cls: 'kimp-cell', html: (r) => kimpCell(r) },
+    { key: 'change_short_pct', label: '5분 Bitkub', html: (r) => deltaCell(r.change_short_pct) },
     { key: 'bitkub_change_24h_pct', label: '24h Bitkub', html: (r) => deltaCell(r.bitkub_change_24h_pct) },
     { key: 'bithumb_change_24h_pct', label: '24h Bithumb', html: (r) => deltaCell(r.bithumb_change_24h_pct) },
     { key: 'bitkub_volume_thb', label: '거래대금 Bitkub (THB)', text: (r) => fmtCompact(r.bitkub_volume_thb) },
     { key: 'bithumb_volume_krw', label: '거래대금 Bithumb (KRW)', text: (r) => fmtCompact(r.bithumb_volume_krw) },
   ];
   function visibleRows() {
+    const snap = state.snap; if (!snap) return [];
     const q = state.q.trim().toUpperCase();
     const rows = snap.rows.filter((r) => {
       if (q && !r.symbol.includes(q)) return false;
@@ -314,7 +458,7 @@ const DATA = __SNAPSHOT__;
         return `<td class="${c.cls || ''} ${!c.html && raw === '-' ? 'na' : ''}">${inner}</td>`;
       }).join('')}</tr>`;
     }).join('');
-    $('#count').textContent = `${rows.length} / ${snap.rows.length} 코인`;
+    $('#count').textContent = `${rows.length} / ${state.snap ? state.snap.rows.length : 0} 코인`;
   }
   $('#thead').addEventListener('click', (ev) => {
     const th = ev.target.closest('th'); if (!th) return;
@@ -326,6 +470,12 @@ const DATA = __SNAPSHOT__;
   $('#q').addEventListener('input', (ev) => { state.q = ev.target.value; renderBody(); });
   $('#listing').addEventListener('change', (ev) => { state.listing = ev.target.value; renderBody(); });
   $('#minvol').addEventListener('change', (ev) => { state.minvol = Number(ev.target.value); renderBody(); });
-  renderHead(); renderBody();
+
+  // ---- 시작: 내장 스냅샷이 있으면 먼저 그리고, 실시간 갱신 시작 ----
+  if (DATA && DATA.snapshot) { state.snap = DATA.snapshot; render(); }
+  else { renderHead(); $('#live').innerHTML = '<span class="dot busy"></span>거래소 데이터를 불러오는 중…'; }
+  refresh();
+  setInterval(refresh, REFRESH_MS);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refresh(); });
 })();
 </script>
