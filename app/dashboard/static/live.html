@@ -132,7 +132,7 @@ footer code{font-family:"IBM Plex Mono",monospace;font-size:11px;background:var(
     </select>
     <select id="minvol" aria-label="거래대금 필터">
       <option value="0">거래대금 제한 없음</option>
-      <option value="100000" selected>Bitkub 24h ≥ 100K THB</option>
+      <option value="100000">Bitkub 24h ≥ 100K THB</option>
       <option value="1000000">Bitkub 24h ≥ 1M THB</option>
       <option value="10000000">Bitkub 24h ≥ 10M THB</option>
     </select>
@@ -169,7 +169,7 @@ const DATA = /*SNAPSHOT*/null/*END*/;
   const SHORT_WINDOW_MIN = 5;
   const HISTORY_MAX_SEC = 3600;
   const LIQ_THB = 100000, LIQ_KRW = 1e7;
-  const state = { sort: { key: 'kimp_pct', dir: 'desc' }, q: '', listing: 'both', minvol: 100000, snap: null };
+  const state = { sort: { key: 'kimp_pct', dir: 'desc' }, q: '', listing: 'both', minvol: 0, snap: null };
 
   // ---- 포맷 ----
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
