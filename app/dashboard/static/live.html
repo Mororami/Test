@@ -72,7 +72,7 @@ input:focus,select:focus,button:focus{outline:2px solid var(--accent);outline-of
 button{cursor:pointer}
 .count{color:var(--muted);font-size:12px}
 .table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:auto}
-table{border-collapse:collapse;width:100%;min-width:1080px}
+table{border-collapse:collapse;width:100%;min-width:1120px}
 thead th{position:sticky;top:0;z-index:1;background:var(--surface);text-align:right;font-size:12px;font-weight:600;color:var(--ink-2);padding:10px 12px;border-bottom:1px solid var(--hair);cursor:pointer;white-space:nowrap;user-select:none}
 thead th.active{color:var(--ink)}
 thead th .dir{font-size:9px;margin-left:3px;color:var(--muted)}
@@ -95,6 +95,15 @@ tr.hl td.kimp-cell .v{font-weight:600}
 .tri.up{border-bottom:7px solid var(--prem)}
 .tri.down{border-top:7px solid var(--disc)}
 .tri.flat{width:7px;height:2px;background:var(--muted);border:0;vertical-align:3px}
+.star{cursor:pointer;color:var(--muted);font-size:16px;line-height:1;background:none;border:0;padding:2px 4px;border-radius:6px;user-select:none}
+.star:hover{background:var(--wash)}
+.star.on{color:#e0a800}
+th.fav,td.fav{width:34px;padding-left:10px;padding-right:0;text-align:center}
+tr.isfav td.sym::after{content:"";}
+.favpanel{margin-top:10px}
+.favpanel .rank{grid-template-columns:auto 1fr auto auto auto}
+.favpanel .rank .muted{color:var(--muted);font-size:12px}
+.favpanel .empty{color:var(--muted);font-size:13px}
 footer{margin-top:18px;color:var(--muted);font-size:12px;line-height:1.7}
 footer code{font-family:"IBM Plex Mono",monospace;font-size:11px;background:var(--surface-2);padding:1px 5px;border-radius:4px}
 @media (max-width:640px){h1{font-size:20px}.tile .value{font-size:24px}.bar{width:64px}}
@@ -112,6 +121,8 @@ footer code{font-family:"IBM Plex Mono",monospace;font-size:11px;background:var(
 
   <div class="tiles" id="tiles"></div>
 
+  <div class="panel favpanel" id="favpanel" hidden><h2>즐겨찾기 <span>표의 ★ 로 추가 · 이 브라우저에만 저장</span></h2><div class="rank" id="favlist"></div></div>
+
   <div class="glance">
     <div class="panel"><h2>김프 상위 <span>Bithumb 이 더 비쌈</span></h2><div class="rank prem" id="top-prem"></div></div>
     <div class="panel"><h2>역프 상위 <span>Bitkub 이 더 비쌈</span></h2><div class="rank disc" id="top-disc"></div></div>
@@ -126,6 +137,7 @@ footer code{font-family:"IBM Plex Mono",monospace;font-size:11px;background:var(
   <div class="filters">
     <input id="q" type="search" placeholder="코인 검색 (예: BTC)" autocomplete="off" aria-label="코인 검색">
     <select id="listing" aria-label="상장 필터">
+      <option value="fav">즐겨찾기만</option>
       <option value="both">Bithumb 상장 코인만</option>
       <option value="all">Bitkub 전체</option>
       <option value="only">Bithumb 미상장만</option>
@@ -170,6 +182,16 @@ const DATA = /*SNAPSHOT*/null/*END*/;
   const HISTORY_MAX_SEC = 3600;
   const LIQ_THB = 100000, LIQ_KRW = 1e7;
   const state = { sort: { key: 'kimp_pct', dir: 'desc' }, q: '', listing: 'both', minvol: 0, snap: null };
+
+  // ---- 즐겨찾기 (이 브라우저의 localStorage 에만 저장) ----
+  const FAV_KEY = 'kimp-favorites';
+  let favorites = new Set();
+  try { favorites = new Set(JSON.parse(localStorage.getItem(FAV_KEY) || '[]')); } catch (e) { /* 저장소 사용 불가 */ }
+  function saveFavorites() { try { localStorage.setItem(FAV_KEY, JSON.stringify([...favorites])); } catch (e) { /* 무시 */ } }
+  function toggleFavorite(sym) {
+    if (favorites.has(sym)) favorites.delete(sym); else favorites.add(sym);
+    saveFavorites(); renderFavorites(); renderBody();
+  }
 
   // ---- 포맷 ----
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -333,8 +355,24 @@ const DATA = /*SNAPSHOT*/null/*END*/;
     const snap = state.snap; if (!snap) return;
     const d = new Date(snap.ts * 1000);
     $('#asof').innerHTML = `수집 시각 <b class="num">${esc(d.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', hour12: false }))}</b> KST · 환율 1 THB = <b class="num">${snap.rate_used.thb_krw.toFixed(3)}</b>원 (${esc(snap.rate_used.source)})`;
-    renderTiles(snap); renderGlance(snap); renderHead(); renderBody();
+    renderTiles(snap); renderFavorites(); renderGlance(snap); renderHead(); renderBody();
   }
+  function renderFavorites() {
+    const panel = $('#favpanel'), snap = state.snap;
+    if (!favorites.size || !snap) { panel.hidden = true; return; }
+    panel.hidden = false;
+    const bySym = new Map(snap.rows.map((r) => [r.symbol, r]));
+    const rows = [...favorites].sort().map((sym) => bySym.get(sym) || { symbol: sym });
+    const max = Math.max(...rows.map((r) => Math.abs(r.kimp_pct || 0)), 0.01);
+    $('#favlist').innerHTML = rows.map((r) => {
+      if (!isNum(r.bitkub_thb)) return `<span class="sym">${esc(r.symbol)}</span><span class="muted" style="grid-column:span 3">Bitkub 시세 없음</span><button class="star on" data-sym="${esc(r.symbol)}" title="즐겨찾기 해제">★</button>`;
+      const bar = isNum(r.kimp_pct) && !r.suspect
+        ? `<span class="track"><i style="width:${(Math.abs(r.kimp_pct) / max * 100).toFixed(1)}%;background:var(${r.kimp_pct >= 0 ? '--prem' : '--disc'})"></i></span>`
+        : '<span class="track"></span>';
+      return `<span class="sym">${esc(r.symbol)}</span>${bar}<span class="muted num">${fmtKrw(r.bitkub_krw)} → ${fmtKrw(r.bithumb_krw)}</span><span class="pct num">${r.suspect ? '<span class="na">-</span>' : fmtPct(r.kimp_pct)}</span><button class="star on" data-sym="${esc(r.symbol)}" title="즐겨찾기 해제">★</button>`;
+    }).join('');
+  }
+  $('#favlist').addEventListener('click', (ev) => { const b = ev.target.closest('.star'); if (b) toggleFavorite(b.dataset.sym); });
   function renderTiles(snap) {
     const st = snap.stats, fx = snap.forex, implied = snap.usdt_implied_thb_krw, used = snap.rate_used;
     const usedTag = (src) => used.source === src ? ' · 김프 계산에 사용' : '';
@@ -410,6 +448,7 @@ const DATA = /*SNAPSHOT*/null/*END*/;
     return `<span class="tri ${cls}"></span>${n(fmtPct(v))}`;
   }
   const COLS = [
+    { key: 'fav', label: '★', cls: 'fav', html: (r) => `<button class="star ${favorites.has(r.symbol) ? 'on' : ''}" data-sym="${esc(r.symbol)}" title="즐겨찾기">${favorites.has(r.symbol) ? '★' : '☆'}</button>`, nosort: true },
     { key: 'symbol', label: '코인', cls: 'sym', text: (r) => r.symbol, asc: true, plain: true },
     { key: 'bitkub_thb', label: 'Bitkub (THB)', text: (r) => fmtNum(r.bitkub_thb) },
     { key: 'bitkub_krw', label: 'Bitkub 환산 (KRW)', text: (r) => fmtKrw(r.bitkub_krw) },
@@ -426,6 +465,7 @@ const DATA = /*SNAPSHOT*/null/*END*/;
     const q = state.q.trim().toUpperCase();
     const rows = snap.rows.filter((r) => {
       if (q && !r.symbol.includes(q)) return false;
+      if (state.listing === 'fav' && !favorites.has(r.symbol)) return false;
       if (state.listing === 'both' && !isNum(r.kimp_pct)) return false;
       if (state.listing === 'only' && isNum(r.bithumb_krw)) return false;
       if (state.minvol > 0 && !(isNum(r.bitkub_volume_thb) && r.bitkub_volume_thb >= state.minvol)) return false;
@@ -433,6 +473,8 @@ const DATA = /*SNAPSHOT*/null/*END*/;
     });
     const { key, dir } = state.sort, sign = dir === 'asc' ? 1 : -1;
     rows.sort((a, b) => {
+      const fa = favorites.has(a.symbol), fb = favorites.has(b.symbol);
+      if (fa !== fb) return fa ? -1 : 1;              // 즐겨찾기는 항상 맨 위
       const x = a[key], y = b[key];
       if (key === 'symbol') return sign * x.localeCompare(y);
       const xn = isNum(x), yn = isNum(y);
@@ -445,6 +487,7 @@ const DATA = /*SNAPSHOT*/null/*END*/;
   function renderHead() {
     $('#thead').innerHTML = COLS.map((c) => {
       const active = state.sort.key === c.key;
+      if (c.nosort) return `<th class="${c.cls}" style="cursor:default">${esc(c.label)}</th>`;
       return `<th class="${c.cls || ''} ${active ? 'active' : ''}" data-key="${c.key}">${esc(c.label)}${active ? `<span class="dir">${state.sort.dir === 'asc' ? '▲' : '▼'}</span>` : ''}</th>`;
     }).join('');
   }
@@ -452,7 +495,7 @@ const DATA = /*SNAPSHOT*/null/*END*/;
     const rows = visibleRows();
     $('#tbody').innerHTML = rows.map((r) => {
       const cls = isNum(r.kimp_pct) && !r.suspect && Math.abs(r.kimp_pct) >= HIGHLIGHT ? 'hl' : '';
-      return `<tr class="${cls}">${COLS.map((c) => {
+      return `<tr class="${cls} ${favorites.has(r.symbol) ? 'isfav' : ''}">${COLS.map((c) => {
         const raw = c.html ? c.html(r) : esc(c.text(r));
         const inner = c.html || c.plain ? raw : (raw === '-' ? raw : n(raw));
         return `<td class="${c.cls || ''} ${!c.html && raw === '-' ? 'na' : ''}">${inner}</td>`;
@@ -461,12 +504,13 @@ const DATA = /*SNAPSHOT*/null/*END*/;
     $('#count').textContent = `${rows.length} / ${state.snap ? state.snap.rows.length : 0} 코인`;
   }
   $('#thead').addEventListener('click', (ev) => {
-    const th = ev.target.closest('th'); if (!th) return;
+    const th = ev.target.closest('th'); if (!th || !th.dataset.key) return;
     const key = th.dataset.key, col = COLS.find((c) => c.key === key);
     if (state.sort.key === key) state.sort.dir = state.sort.dir === 'asc' ? 'desc' : 'asc';
     else state.sort = { key, dir: col && col.asc ? 'asc' : 'desc' };
     renderHead(); renderBody();
   });
+  $('#tbody').addEventListener('click', (ev) => { const b = ev.target.closest('.star'); if (b) toggleFavorite(b.dataset.sym); });
   $('#q').addEventListener('input', (ev) => { state.q = ev.target.value; renderBody(); });
   $('#listing').addEventListener('change', (ev) => { state.listing = ev.target.value; renderBody(); });
   $('#minvol').addEventListener('change', (ev) => { state.minvol = Number(ev.target.value); renderBody(); });

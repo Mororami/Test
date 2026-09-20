@@ -45,7 +45,7 @@ button{cursor:pointer}
 .filters .spacer{flex:1}
 .count{color:var(--muted);font-size:12px}
 .table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:auto;max-height:calc(100vh - 140px)}
-table{border-collapse:collapse;width:100%;min-width:1060px;font-variant-numeric:tabular-nums}
+table{border-collapse:collapse;width:100%;min-width:1100px;font-variant-numeric:tabular-nums}
 thead th{position:sticky;top:0;z-index:1;background:var(--surface);text-align:right;font-size:12px;font-weight:600;color:var(--ink-2);padding:10px 12px;border-bottom:1px solid var(--grid);cursor:pointer;white-space:nowrap;user-select:none}
 thead th.active{color:var(--ink)}
 thead th .dir{font-size:10px;margin-left:3px;color:var(--muted)}
@@ -77,6 +77,10 @@ section.alerts h2{font-size:15px;margin:0 0 8px;font-weight:600}
 .alert .k{color:var(--ink-2)}
 .alert .msg{white-space:pre-wrap;color:var(--ink);overflow-wrap:anywhere}
 .empty{padding:14px;color:var(--muted);font-size:13px}
+.star{cursor:pointer;color:var(--muted);font-size:16px;line-height:1;background:none;border:0;padding:2px 4px;border-radius:6px;user-select:none}
+.star:hover{background:var(--wash)}
+.star.on{color:#e0a800}
+th.fav,td.fav{width:34px;padding-left:10px;padding-right:0;text-align:center}
 footer{margin:16px 0 8px;color:var(--muted);font-size:12px;line-height:1.6}
 @media (max-width:640px){h1{font-size:18px}.tile .value{font-size:24px}.bar{width:64px}.alert{grid-template-columns:56px 1fr}.alert .k{display:none}}
 </style>
@@ -94,6 +98,7 @@ footer{margin:16px 0 8px;color:var(--muted);font-size:12px;line-height:1.6}
   <div class="filters">
     <input id="q" type="search" placeholder="코인 검색 (예: BTC)" autocomplete="off">
     <select id="listing">
+      <option value="fav">즐겨찾기만</option>
       <option value="both">Bithumb 상장 코인만</option>
       <option value="all">Bitkub 전체</option>
       <option value="only">Bithumb 미상장만</option>
@@ -138,6 +143,16 @@ footer{margin:16px 0 8px;color:var(--muted);font-size:12px;line-height:1.6}
     sort: { key: 'kimp_pct', dir: 'desc' },
     q: '', listing: 'both', minvol: 0, failed: false,
   };
+
+  // ---- 즐겨찾기 (이 브라우저의 localStorage 에만 저장) ---------------------
+  const FAV_KEY = 'kimp-favorites';
+  let favorites = new Set();
+  try { favorites = new Set(JSON.parse(localStorage.getItem(FAV_KEY) || '[]')); } catch (e) { /* 저장소 사용 불가 */ }
+  function toggleFavorite(sym) {
+    if (favorites.has(sym)) favorites.delete(sym); else favorites.add(sym);
+    try { localStorage.setItem(FAV_KEY, JSON.stringify([...favorites])); } catch (e) { /* 무시 */ }
+    renderBody();
+  }
 
   // ---- 포맷 ----------------------------------------------------------
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -185,6 +200,7 @@ footer{margin:16px 0 8px;color:var(--muted);font-size:12px;line-height:1.6}
   }
 
   const COLS = [
+    { key: 'fav', label: '★', cls: 'fav', nosort: true, html: (r) => `<button class="star ${favorites.has(r.symbol) ? 'on' : ''}" data-sym="${esc(r.symbol)}" title="즐겨찾기">${favorites.has(r.symbol) ? '★' : '☆'}</button>` },
     { key: 'symbol', label: '코인', cls: 'sym', text: (r) => r.symbol, asc: true },
     { key: 'bitkub_thb', label: 'Bitkub (THB)', text: (r) => fmtNum(r.bitkub_thb) },
     { key: 'bitkub_krw', label: 'Bitkub 환산 (KRW)', text: (r) => fmtKrw(r.bitkub_krw) },
@@ -203,6 +219,7 @@ footer{margin:16px 0 8px;color:var(--muted);font-size:12px;line-height:1.6}
     const q = state.q.trim().toUpperCase();
     let rows = state.snap.rows.filter((r) => {
       if (q && !r.symbol.includes(q)) return false;
+      if (state.listing === 'fav' && !favorites.has(r.symbol)) return false;
       if (state.listing === 'both' && !isNum(r.kimp_pct)) return false;
       if (state.listing === 'only' && isNum(r.bithumb_krw)) return false;
       if (state.minvol > 0 && !(isNum(r.bitkub_volume_thb) && r.bitkub_volume_thb >= state.minvol)) return false;
@@ -211,6 +228,8 @@ footer{margin:16px 0 8px;color:var(--muted);font-size:12px;line-height:1.6}
     const { key, dir } = state.sort;
     const sign = dir === 'asc' ? 1 : -1;
     rows.sort((a, b) => {
+      const fa = favorites.has(a.symbol), fb = favorites.has(b.symbol);
+      if (fa !== fb) return fa ? -1 : 1;              // 즐겨찾기는 항상 맨 위
       const x = a[key], y = b[key];
       if (key === 'symbol') return sign * x.localeCompare(y);
       const xn = isNum(x), yn = isNum(y);
@@ -257,6 +276,7 @@ footer{margin:16px 0 8px;color:var(--muted);font-size:12px;line-height:1.6}
     $('#thead').innerHTML = COLS.map((c) => {
       const label = typeof c.label === 'function' ? c.label() : c.label;
       const active = state.sort.key === c.key;
+      if (c.nosort) return `<th class="${c.cls}" style="cursor:default">${esc(label)}</th>`;
       const dir = active ? `<span class="dir">${state.sort.dir === 'asc' ? '▲' : '▼'}</span>` : '';
       return `<th class="${c.cls || ''} ${active ? 'active' : ''}" data-key="${c.key}">${esc(label)}${dir}</th>`;
     }).join('');
@@ -327,12 +347,13 @@ footer{margin:16px 0 8px;color:var(--muted);font-size:12px;line-height:1.6}
 
   // ---- 이벤트 ------------------------------------------------------------
   $('#thead').addEventListener('click', (ev) => {
-    const th = ev.target.closest('th'); if (!th) return;
+    const th = ev.target.closest('th'); if (!th || !th.dataset.key) return;
     const key = th.dataset.key, col = COLS.find((c) => c.key === key);
     if (state.sort.key === key) state.sort.dir = state.sort.dir === 'asc' ? 'desc' : 'asc';
     else state.sort = { key, dir: col && col.asc ? 'asc' : 'desc' };
     renderHead(); renderBody();
   });
+  $('#tbody').addEventListener('click', (ev) => { const b = ev.target.closest('.star'); if (b) toggleFavorite(b.dataset.sym); });
   $('#q').addEventListener('input', (ev) => { state.q = ev.target.value; renderBody(); });
   $('#listing').addEventListener('change', (ev) => { state.listing = ev.target.value; renderBody(); });
   $('#minvol').addEventListener('change', (ev) => { state.minvol = Number(ev.target.value); renderBody(); });
