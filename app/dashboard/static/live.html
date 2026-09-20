@@ -58,13 +58,6 @@ h2{font-size:14px;font-weight:600;margin:0 0 10px;color:var(--ink-2)}
 .rank.prem .track i{background:var(--prem)}
 .rank.disc .track i{background:var(--disc)}
 .rank .pct{text-align:right;min-width:64px}
-.dist{margin-top:10px}
-.dist svg{width:100%;height:auto;display:block}
-.dist .axis{fill:var(--muted);font-size:10px;font-family:"IBM Plex Mono",monospace}
-.dist .bar-p{fill:var(--prem)} .dist .bar-d{fill:var(--disc)} .dist .bar-z{fill:var(--muted)}
-.dist .mid{stroke:var(--hair);stroke-width:1}
-.legend{display:flex;gap:16px;font-size:12px;color:var(--ink-2);margin-top:6px;flex-wrap:wrap}
-.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
 .filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:22px 0 10px}
 .filters .spacer{flex:1}
 input,select,button{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px}
@@ -124,21 +117,16 @@ footer code{font-family:"IBM Plex Mono",monospace;font-size:11px;background:var(
   <div class="panel favpanel" id="favpanel" hidden><h2>즐겨찾기 <span>표의 ★ 로 추가 · 이 브라우저에만 저장</span></h2><div class="rank" id="favlist"></div></div>
 
   <div class="glance">
-    <div class="panel"><h2>김프 상위 <span>Bithumb 이 더 비쌈</span></h2><div class="rank prem" id="top-prem"></div></div>
+    <div class="panel"><h2>김프 상위 <span>Bithumb 이 더 비쌈 · 거래대금 Bitkub ≥ 100K THB, Bithumb ≥ 1천만원</span></h2><div class="rank prem" id="top-prem"></div></div>
     <div class="panel"><h2>역프 상위 <span>Bitkub 이 더 비쌈</span></h2><div class="rank disc" id="top-disc"></div></div>
   </div>
 
-  <div class="panel dist" style="margin-top:10px">
-    <h2>김프 분포 <span id="dist-sub"></span></h2>
-    <div id="dist"></div>
-    <div class="legend"><span><i style="background:var(--prem)"></i>김프 (Bithumb 비쌈)</span><span><i style="background:var(--disc)"></i>역프 (Bitkub 비쌈)</span><span><i style="background:var(--muted)"></i>±0.5% 이내</span></div>
-  </div>
 
   <div class="filters">
     <input id="q" type="search" placeholder="코인 검색 (예: BTC)" autocomplete="off" aria-label="코인 검색">
     <select id="listing" aria-label="상장 필터">
       <option value="fav">즐겨찾기만</option>
-      <option value="both">Bithumb 상장 코인만</option>
+      <option value="both" selected>Bithumb 상장 코인만</option>
       <option value="all">Bitkub 전체</option>
       <option value="only">Bithumb 미상장만</option>
     </select>
@@ -400,38 +388,6 @@ const DATA = /*SNAPSHOT*/null/*END*/;
         : '<span class="na">해당 없음</span>';
     };
     rank($('#top-prem'), prem); rank($('#top-disc'), disc);
-    $('#dist-sub').textContent = pool === liquid ? `거래대금 기준 충족 ${pool.length}개 (Bitkub ≥ 100K THB, Bithumb ≥ 1천만원)` : `${pool.length}개`;
-    renderHist(pool);
-  }
-  function renderHist(pool) {
-    const W = 900, H = 170, padL = 8, padR = 8, padT = 12, padB = 26;
-    const step = 1, lo = -10.5, hi = 10.5;          // 0 을 중심으로 한 1% 구간, 가운데 구간이 ±0.5%
-    const bins = [];
-    for (let x = lo; x < hi - 1e-9; x += step) bins.push({ x0: x, x1: x + step, n: 0 });
-    let below = 0, above = 0;
-    pool.forEach((r) => {
-      const v = r.kimp_pct;
-      if (v < lo) { below++; return; } if (v >= hi) { above++; return; }
-      bins[Math.floor((v - lo) / step)].n++;
-    });
-    const all = [{ n: below, edge: `<${lo}%` }, ...bins, { n: above, edge: `≥${hi}%` }];
-    const max = Math.max(...all.map((b) => b.n), 1);
-    const bw = (W - padL - padR) / all.length, plotH = H - padT - padB;
-    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="김프 분포 히스토그램">`;
-    const zeroIdx = all.findIndex((b) => !b.edge && b.x0 < 0 && b.x1 > 0);
-    const midX = padL + bw * zeroIdx + bw / 2;
-    svg += `<line class="mid" x1="${midX.toFixed(1)}" y1="${padT}" x2="${midX.toFixed(1)}" y2="${H - padB}"/>`;
-    all.forEach((b, i) => {
-      const h = b.n / max * plotH, x = padL + i * bw + 1, y = padT + plotH - h, cx = x + (bw - 2) / 2;
-      const cls = b.edge ? (i === 0 ? 'bar-d' : 'bar-p') : b.x1 <= 0 ? 'bar-d' : b.x0 >= 0 ? 'bar-p' : 'bar-z';
-      const title = b.edge ? b.edge : `${b.x0}% ~ ${b.x1}%`;
-      svg += `<rect class="${cls}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(bw - 2).toFixed(1)}" height="${h.toFixed(1)}" rx="2"><title>${title}: ${b.n}개</title></rect>`;
-      if (b.n > 0) svg += `<text class="axis" x="${cx.toFixed(1)}" y="${(y - 3).toFixed(1)}" text-anchor="middle">${b.n}</text>`;
-      const center = b.edge ? null : b.x0 + 0.5;
-      const label = b.edge ? b.edge : (center % 5 === 0 ? (center > 0 ? '+' : '') + center + '%' : '');
-      if (label) svg += `<text class="axis" x="${cx.toFixed(1)}" y="${H - 8}" text-anchor="middle">${label}</text>`;
-    });
-    $('#dist').innerHTML = svg + '</svg>';
   }
 
   // ---- 표 ----
